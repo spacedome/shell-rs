@@ -12,7 +12,19 @@ fn main() {
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        // command not found
-        println!("{}: command not found", input.trim())
+        if run_command(input) {
+            break;
+        }
+    }
+}
+
+fn run_command(command: String) -> bool {
+    // command not found
+    match command.trim() {
+        "exit 0" => true,
+        x => {
+            println!("{}: command not found", x);
+            false
+        }
     }
 }
