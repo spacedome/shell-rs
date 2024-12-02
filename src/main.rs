@@ -83,17 +83,7 @@ fn run_type(input: &str) {
 }
 
 fn run_bin(path: std::path::PathBuf, args: Vec<&str>) {
-    let output = std::process::Command::new(path)
-        .args(args)
-        .stdout(std::process::Stdio::piped())
-        .output();
-    match output {
-        Ok(o) => {
-            let x = o.stdout;
-            let _ = io::stdout().write_all(&x);
-        }
-        Err(_) => println!("err"),
-    }
+    let _status = std::process::Command::new(path).args(args).status();
 }
 
 fn parse_input(input: &str) -> IResult<&str, Command> {
