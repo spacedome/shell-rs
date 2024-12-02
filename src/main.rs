@@ -5,11 +5,11 @@ use nom::{branch::alt, multi::many0};
 use std::io::{self, Write};
 
 #[derive(Clone)]
-enum Command {
+enum Command<'a> {
     Exit(i32),
     Echo(String),
     Type(String),
-    Bin(std::path::PathBuf),
+    Bin(std::path::PathBuf, Vec<&'a str>),
 }
 
 fn main() {
@@ -36,7 +36,7 @@ fn run_command(input: String) {
                 println!("{}", rem)
             }
             (_, Command::Type(s)) => run_type(&s),
-            (_, Command::Bin(s)) => run_bin(s),
+            (_, Command::Bin(s, args)) => run_bin(s, args),
         },
         Err(_) => {
             println!("{}: command not found", input.trim())
@@ -82,12 +82,22 @@ fn run_type(input: &str) {
     }
 }
 
-fn run_bin(path: std::path::PathBuf) {
-    let _output = std::process::Command::new(path).output();
+fn run_bin(path: std::path::PathBuf, args: Vec<&str>) {
+    let output = std::process::Command::new(path)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .output();
+    match output {
+        Ok(o) => {
+            let x = o.stdout;
+            let _ = io::stdout().write_all(&x);
+        }
+        Err(_) => println!("err"),
+    }
 }
 
 fn parse_input(input: &str) -> IResult<&str, Command> {
-    alt((parse_exit, parse_echo, parse_type))(input)
+    alt((parse_exit, parse_echo, parse_type, parse_bin))(input)
 }
 
 fn parse_exit(input: &str) -> IResult<&str, Command> {
@@ -109,10 +119,19 @@ fn parse_type(input: &str) -> IResult<&str, Command> {
 }
 
 fn parse_bin(input: &str) -> IResult<&str, Command> {
-    let (input, cmd) = nom::character::complete::alphanumeric1(input)?;
-    let path = get_bin_path(cmd);
+    let (input, cmd) = nom::multi::fold_many1(
+        nom::character::complete::none_of(" "),
+        Vec::new,
+        |mut acc: Vec<_>, item| {
+            acc.push(item);
+            acc
+        },
+    )(input)?;
+    let cmd = String::from_iter(cmd);
+    let path = get_bin_path(&cmd);
+    let args = input.split_whitespace().collect();
     match path {
-        Ok(p) => Ok((input, Command::Bin(p))),
+        Ok(p) => Ok((input, Command::Bin(p, args))),
         Err(_) => Err(nom::Err::Error(nom::error::Error {
             input: "bin",
             code: nom::error::ErrorKind::Tag,
