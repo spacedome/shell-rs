@@ -9,6 +9,7 @@ enum Command {
     Exit(i32),
     Echo(String),
     Type(String),
+    Bin(std::path::PathBuf),
 }
 
 fn main() {
@@ -35,6 +36,7 @@ fn run_command(input: String) {
                 println!("{}", rem)
             }
             (_, Command::Type(s)) => run_type(&s),
+            (_, Command::Bin(s)) => run_bin(s),
         },
         Err(_) => {
             println!("{}: command not found", input.trim())
@@ -80,6 +82,10 @@ fn run_type(input: &str) {
     }
 }
 
+fn run_bin(path: std::path::PathBuf) {
+    let _output = std::process::Command::new(path).output();
+}
+
 fn parse_input(input: &str) -> IResult<&str, Command> {
     alt((parse_exit, parse_echo, parse_type))(input)
 }
@@ -100,4 +106,16 @@ fn parse_type(input: &str) -> IResult<&str, Command> {
     let (input, _) = tag("type ")(input)?;
     let (input, _) = many0(tag(" "))(input)?;
     Ok((input, Command::Type(input.to_string())))
+}
+
+fn parse_bin(input: &str) -> IResult<&str, Command> {
+    let (input, cmd) = nom::character::complete::alphanumeric1(input)?;
+    let path = get_bin_path(cmd);
+    match path {
+        Ok(p) => Ok((input, Command::Bin(p))),
+        Err(_) => Err(nom::Err::Error(nom::error::Error {
+            input: "bin",
+            code: nom::error::ErrorKind::Tag,
+        })),
+    }
 }
