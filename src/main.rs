@@ -5,13 +5,13 @@ use nom::{branch::alt, multi::many0};
 use std::io::{self, Write};
 use std::str::FromStr;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 enum Command<'a> {
     Pwd,
     Cd(std::path::PathBuf),
     Exit(i32),
-    Echo(String),
-    Type(String),
+    Echo(&'a str),
+    Type(&'a str),
     Bin(std::path::PathBuf, Vec<&'a str>),
 }
 
@@ -77,7 +77,7 @@ fn get_bin_path(input: &str) -> Result<std::path::PathBuf, String> {
 
 fn run_type(input: &str) {
     match input {
-        "exit" | "echo" | "type" | "pwd" => {
+        "exit" | "echo" | "type" | "pwd" | "cd" => {
             println!("{} is a shell builtin", input)
         }
         _ => match get_bin_path(input) {
@@ -133,15 +133,38 @@ fn parse_exit(input: &str) -> IResult<&str, Command> {
     Ok((input, Command::Exit(status)))
 }
 
+fn parse_args(input: &str) -> IResult<&str, Vec<&str>> {
+    let (input, args) = nom::multi::fold_many1(
+        nom::sequence::terminated(
+            alt((
+                nom::sequence::delimited(
+                    nom::character::complete::char('\''),
+                    nom::bytes::complete::is_not("'"),
+                    nom::character::complete::char('\''),
+                ),
+                nom::bytes::complete::is_not(" \t\n\r"),
+            )),
+            nom::character::complete::multispace0,
+        ),
+        Vec::new,
+        |mut acc: Vec<_>, item| {
+            acc.push(item);
+            acc
+        },
+    )(input)?;
+    let args = Vec::from_iter(args);
+    Ok((input, args))
+}
+
 fn parse_echo(input: &str) -> IResult<&str, Command> {
     let (input, _) = tag("echo ")(input)?;
-    Ok((input, Command::Echo(input.to_string())))
+    Ok((input, Command::Echo(input)))
 }
 
 fn parse_type(input: &str) -> IResult<&str, Command> {
     let (input, _) = tag("type ")(input)?;
     let (input, _) = many0(tag(" "))(input)?;
-    Ok((input, Command::Type(input.to_string())))
+    Ok((input, Command::Type(input)))
 }
 
 fn parse_bin(input: &str) -> IResult<&str, Command> {
@@ -174,5 +197,22 @@ fn parse_cd(input: &str) -> IResult<&str, Command> {
             input: "cd",
             code: nom::error::ErrorKind::Tag,
         })),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_echo() {
+        let (_, cmd) = parse_echo("echo hello").unwrap();
+        assert_eq!(cmd, Command::Echo("hello"));
+    }
+
+    #[test]
+    fn test_parse_args() {
+        let (_, args) = parse_args("--hello world '1 2 3'").unwrap();
+        assert_eq!(args, vec!["--hello", "world", "1 2 3"]);
     }
 }
