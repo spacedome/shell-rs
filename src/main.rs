@@ -10,7 +10,7 @@ enum Command<'a> {
     Pwd,
     Cd(std::path::PathBuf),
     Exit(i32),
-    Echo(&'a str),
+    Echo(Vec<&'a str>),
     Type(&'a str),
     Bin(std::path::PathBuf, Vec<&'a str>),
 }
@@ -36,7 +36,7 @@ fn run_command(input: String) {
         Ok(command) => match command {
             (_, Command::Exit(status)) => std::process::exit(status),
             (_, Command::Echo(rem)) => {
-                println!("{}", rem)
+                println!("{}", rem.join(" "))
             }
             (_, Command::Type(s)) => run_type(&s),
             (_, Command::Bin(s, args)) => run_bin(s, args),
@@ -133,32 +133,34 @@ fn parse_exit(input: &str) -> IResult<&str, Command> {
     Ok((input, Command::Exit(status)))
 }
 
-fn parse_args(input: &str) -> IResult<&str, Vec<&str>> {
-    let (input, args) = nom::multi::fold_many1(
-        nom::sequence::terminated(
-            alt((
-                nom::sequence::delimited(
-                    nom::character::complete::char('\''),
-                    nom::bytes::complete::is_not("'"),
-                    nom::character::complete::char('\''),
-                ),
-                nom::bytes::complete::is_not(" \t\n\r"),
-            )),
-            nom::character::complete::multispace0,
-        ),
-        Vec::new,
-        |mut acc: Vec<_>, item| {
-            acc.push(item);
-            acc
-        },
+fn parse_arg(input: &str) -> IResult<&str, &str> {
+    let (input, arg) = nom::sequence::terminated(
+        alt((
+            nom::sequence::delimited(
+                nom::character::complete::char('\''),
+                nom::bytes::complete::is_not("'"),
+                nom::character::complete::char('\''),
+            ),
+            nom::bytes::complete::is_not(" \t\n\r"),
+        )),
+        nom::character::complete::multispace0,
     )(input)?;
+    Ok((input, arg))
+}
+
+fn parse_args(input: &str) -> IResult<&str, Vec<&str>> {
+    let (input, args) = nom::multi::fold_many1(parse_arg, Vec::new, |mut acc: Vec<_>, item| {
+        acc.push(item);
+        acc
+    })(input)?;
     let args = Vec::from_iter(args);
     Ok((input, args))
 }
 
 fn parse_echo(input: &str) -> IResult<&str, Command> {
     let (input, _) = tag("echo ")(input)?;
-    Ok((input, Command::Echo(input)))
+    let (input, args) = parse_args(input)?;
+    Ok((input, Command::Echo(args)))
 }
 
 fn parse_type(input: &str) -> IResult<&str, Command> {
@@ -168,17 +170,10 @@ fn parse_type(input: &str) -> IResult<&str, Command> {
 }
 
 fn parse_bin(input: &str) -> IResult<&str, Command> {
-    let (input, cmd) = nom::multi::fold_many1(
-        nom::character::complete::none_of(" "),
-        Vec::new,
-        |mut acc: Vec<_>, item| {
-            acc.push(item);
-            acc
-        },
-    )(input)?;
-    let cmd = String::from_iter(cmd);
-    let path = get_bin_path(&cmd);
-    let args = input.split_whitespace().collect();
+    let (input, cmd) = nom::bytes::complete::is_not(" \t\n\r")(input)?;
+    let (input, _) = many0(tag(" "))(input)?;
+    let (_, args) = parse_args(input)?;
+    let path = get_bin_path(cmd);
     match path {
         Ok(p) => Ok((input, Command::Bin(p, args))),
         Err(_) => Err(nom::Err::Error(nom::error::Error {
@@ -207,7 +202,7 @@ mod tests {
     #[test]
     fn test_parse_echo() {
         let (_, cmd) = parse_echo("echo hello").unwrap();
-        assert_eq!(cmd, Command::Echo("hello"));
+        assert_eq!(cmd, Command::Echo(vec!["hello"]));
     }
 
     #[test]
