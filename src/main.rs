@@ -13,7 +13,6 @@ enum Command {
 
 fn main() {
     loop {
-        // Uncomment this block to pass the first stage
         print!("$ ");
         io::stdout().flush().unwrap();
 
@@ -35,16 +34,49 @@ fn run_command(input: String) {
             (_, Command::Echo(rem)) => {
                 println!("{}", rem)
             }
-            (_, Command::Type(s)) => match s.as_str() {
-                "exit" | "echo" | "type" => {
-                    println!("{} is a shell builtin", s)
-                }
-                _ => println!("{}: not found", s),
-            },
+            (_, Command::Type(s)) => run_type(&s),
         },
         Err(_) => {
             println!("{}: command not found", input.trim())
         }
+    }
+}
+
+fn get_bin_path(input: &str) -> Result<std::path::PathBuf, String> {
+    let path = match std::env::var("PATH") {
+        Ok(p) => p,
+        Err(_) => return Err("Error finding PATH".to_string()),
+    };
+
+    // You can split the PATH into individual directories
+    for dir in std::env::split_paths(&path) {
+        if dir.is_dir() {
+            match std::fs::read_dir(dir) {
+                Ok(entries) => {
+                    for entry in entries {
+                        if let Ok(item) = entry {
+                            if item.file_name() == input {
+                                return Ok(item.path().canonicalize().unwrap());
+                            }
+                        }
+                    }
+                }
+                Err(_) => (),
+            }
+        }
+    }
+    Err(format!("{}: not found", input))
+}
+
+fn run_type(input: &str) {
+    match input {
+        "exit" | "echo" | "type" => {
+            println!("{} is a shell builtin", input)
+        }
+        _ => match get_bin_path(input) {
+            Ok(s) => println!("{} is {}", input, s.display()),
+            Err(s) => println!("{}", s),
+        },
     }
 }
 
