@@ -99,6 +99,12 @@ fn run_pwd() {
 }
 
 fn run_cd(path: std::path::PathBuf) {
+    let path = if path.display().to_string() == "~" {
+        #[allow(deprecated)]
+        std::env::home_dir().unwrap()
+    } else {
+        path
+    };
     if path.exists() && path.is_dir() {
         match std::env::set_current_dir(path) {
             Ok(_) => (),
