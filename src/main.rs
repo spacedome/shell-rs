@@ -6,6 +6,7 @@ use std::io::{self, Write};
 
 #[derive(Clone)]
 enum Command<'a> {
+    PWD,
     Exit(i32),
     Echo(String),
     Type(String),
@@ -37,6 +38,7 @@ fn run_command(input: String) {
             }
             (_, Command::Type(s)) => run_type(&s),
             (_, Command::Bin(s, args)) => run_bin(s, args),
+            (_, Command::PWD) => run_pwd(),
         },
         Err(_) => {
             println!("{}: command not found", input.trim())
@@ -72,7 +74,7 @@ fn get_bin_path(input: &str) -> Result<std::path::PathBuf, String> {
 
 fn run_type(input: &str) {
     match input {
-        "exit" | "echo" | "type" => {
+        "exit" | "echo" | "type" | "pwd" => {
             println!("{} is a shell builtin", input)
         }
         _ => match get_bin_path(input) {
@@ -86,8 +88,21 @@ fn run_bin(path: std::path::PathBuf, args: Vec<&str>) {
     let _status = std::process::Command::new(path).args(args).status();
 }
 
+fn run_pwd() {
+    match std::env::var("PWD") {
+        Ok(pwd) => println!("{}", pwd),
+        Err(_) => println!("error: could not get PWD"),
+    };
+}
+
 fn parse_input(input: &str) -> IResult<&str, Command> {
-    alt((parse_exit, parse_echo, parse_type, parse_bin))(input)
+    alt((
+        parse_exit,
+        parse_echo,
+        parse_type,
+        nom::combinator::value(Command::PWD, nom::combinator::all_consuming(tag("pwd"))),
+        parse_bin,
+    ))(input)
 }
 
 fn parse_exit(input: &str) -> IResult<&str, Command> {
