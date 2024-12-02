@@ -1,20 +1,13 @@
 pub use nom::bytes::complete::tag;
 pub use nom::IResult;
-use nom::{
-    branch::alt,
-    bytes::complete::take_till1,
-    character::is_space,
-    combinator::{rest, value},
-    multi::many0,
-    sequence::{preceded, separated_pair},
-};
+use nom::{branch::alt, multi::many0};
 #[allow(unused_imports)]
 use std::io::{self, Write};
 
 #[derive(Clone)]
 enum Command {
-    Exit,
-    Echo,
+    Exit(i32),
+    Echo(String),
     Type(String),
 }
 
@@ -38,13 +31,16 @@ fn run_command(input: String) {
     let maybe_command = parse_input(&input.trim());
     match maybe_command {
         Ok(command) => match command {
-            (_, Command::Exit) => std::process::exit(0),
-            (rem, Command::Echo) => {
+            (_, Command::Exit(status)) => std::process::exit(status),
+            (_, Command::Echo(rem)) => {
                 println!("{}", rem)
             }
-            (_, Command::Type(s)) => {
-                println!("type {}", s)
-            }
+            (_, Command::Type(s)) => match s.as_str() {
+                "exit" | "echo" | "type" => {
+                    println!("{} is a shell builtin", s)
+                }
+                _ => println!("{}: not found", s),
+            },
         },
         Err(_) => {
             println!("{}: command not found", input.trim())
@@ -53,15 +49,23 @@ fn run_command(input: String) {
 }
 
 fn parse_input(input: &str) -> IResult<&str, Command> {
-    alt((
-        value(Command::Exit, tag("exit 0")),
-        value(Command::Echo, tag("echo ")),
-        parse_type,
-    ))(input)
+    alt((parse_exit, parse_echo, parse_type))(input)
+}
+
+fn parse_exit(input: &str) -> IResult<&str, Command> {
+    let (input, _) = tag("exit ")(input)?;
+    let (input, _) = many0(tag(" "))(input)?;
+    let (input, status) = nom::character::complete::i32(input)?;
+    Ok((input, Command::Exit(status)))
+}
+
+fn parse_echo(input: &str) -> IResult<&str, Command> {
+    let (input, _) = tag("echo ")(input)?;
+    Ok((input, Command::Echo(input.to_string())))
 }
 
 fn parse_type(input: &str) -> IResult<&str, Command> {
-    let (remaining, _) = tag("type ")(input)?;
-    let (remaining, _) = many0(tag(" "))(remaining)?;
-    Ok((remaining, Command::Type(remaining.to_string())))
+    let (input, _) = tag("type ")(input)?;
+    let (input, _) = many0(tag(" "))(input)?;
+    Ok((input, Command::Type(input.to_string())))
 }
