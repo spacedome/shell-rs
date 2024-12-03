@@ -141,6 +141,13 @@ fn parse_arg(input: &str) -> IResult<&str, &str> {
                 nom::bytes::complete::is_not("'"),
                 nom::character::complete::char('\''),
             ),
+            // NOTE: actual double quoting in POSIX shell is more complex
+            // and requires special handling of \ $ and backtick `
+            nom::sequence::delimited(
+                nom::character::complete::char('"'),
+                nom::bytes::complete::is_not("\""),
+                nom::character::complete::char('"'),
+            ),
             nom::bytes::complete::is_not(" \t\n\r"),
         )),
         nom::character::complete::multispace0,
@@ -209,5 +216,7 @@ mod tests {
     fn test_parse_args() {
         let (_, args) = parse_args("--hello world '1 2 3'").unwrap();
         assert_eq!(args, vec!["--hello", "world", "1 2 3"]);
+        let (_, args) = parse_args("\"'x' 'y'\"").unwrap();
+        assert_eq!(args, vec!["'x' 'y'"]);
     }
 }
