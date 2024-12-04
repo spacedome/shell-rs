@@ -5,15 +5,8 @@ use nom::{branch::alt, multi::many0};
 use std::io::{self, Write};
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq)]
-enum Command<'a> {
-    Pwd,
-    Cd(std::path::PathBuf),
-    Exit(i32),
-    Echo(Vec<&'a str>),
-    Type(&'a str),
-    Bin(std::path::PathBuf, Vec<&'a str>),
-}
+mod command;
+use crate::command::Command;
 
 fn main() {
     loop {
